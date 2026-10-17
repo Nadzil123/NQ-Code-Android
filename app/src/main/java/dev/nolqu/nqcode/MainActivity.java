@@ -282,6 +282,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    @android.annotation.SuppressLint("WrongConstant")
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {

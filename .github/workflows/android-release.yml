@@ -1,0 +1,52 @@
+name: NQ Code Signed Alpha
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: read
+jobs:
+  signed-alpha:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/validate.mjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK 36
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+      - name: Configure alpha signing
+        shell: bash
+        env:
+          NQ_KEYSTORE_BASE64: ${{ secrets.NQ_KEYSTORE_BASE64 }}
+          NQ_SIGNING_STORE_PASSWORD: ${{ secrets.NQ_SIGNING_STORE_PASSWORD }}
+          NQ_SIGNING_KEY_ALIAS: ${{ secrets.NQ_SIGNING_KEY_ALIAS }}
+          NQ_SIGNING_KEY_PASSWORD: ${{ secrets.NQ_SIGNING_KEY_PASSWORD }}
+        run: |
+          for value in "$NQ_KEYSTORE_BASE64" "$NQ_SIGNING_STORE_PASSWORD" "$NQ_SIGNING_KEY_ALIAS" "$NQ_SIGNING_KEY_PASSWORD"; do
+            if [ -z "$value" ]; then echo 'Missing signing secret. See docs/RELEASE.md' >&2; exit 1; fi
+          done
+          printf '%s' "$NQ_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/nq-release.jks"
+          chmod 600 "$RUNNER_TEMP/nq-release.jks"
+          echo "NQ_SIGNING_STORE_FILE=$RUNNER_TEMP/nq-release.jks" >> "$GITHUB_ENV"
+      - name: Build signed alpha release
+        env:
+          NQ_SIGNING_STORE_PASSWORD: ${{ secrets.NQ_SIGNING_STORE_PASSWORD }}
+          NQ_SIGNING_KEY_ALIAS: ${{ secrets.NQ_SIGNING_KEY_ALIAS }}
+          NQ_SIGNING_KEY_PASSWORD: ${{ secrets.NQ_SIGNING_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease :app:lintRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NQ-Code-1.0.0-alpha.1-signed-release
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error

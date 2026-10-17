@@ -13,7 +13,7 @@
       <div class="brand-wrap">
         <button class="icon-btn mobile-menu" id="toggleExplorer" title="Explorer" aria-label="Explorer"><span data-icon="menu"></span></button>
         <span class="brand-symbol"><span data-icon="code"></span></span>
-        <div class="brand">NQ <strong>CODE</strong><small>ANDROID EDITION</small></div>
+        <div class="brand">NQ <strong>CODE</strong><small>1.0.0-alpha.1</small></div>
       </div>
       <div class="project-pill"><span class="pulse"></span><span id="projectTitle">DEMO WORKSPACE</span><span data-icon="chevron-down"></span></div>
       <div class="top-actions">
@@ -86,6 +86,7 @@
   <div id="toast" class="toast" role="status"></div>
   <dialog id="textDialog" class="modal"><form method="dialog" id="textForm"><h2 id="textDialogTitle">File baru</h2><p id="textDialogDescription">Masukkan nama</p><input id="textDialogInput" type="text" autocomplete="off" required maxlength="160"><div class="modal-actions"><button type="button" id="textDialogCancel" class="outline-btn">Batal</button><button type="submit" id="textDialogOkay" value="ok" class="primary-btn">Buat</button></div></form></dialog>
   <dialog id="searchDialog" class="modal"><div class="dialog-inner"><h2>Cari &amp; ganti</h2><input id="findInput" placeholder="Temukan teks..."><input id="replaceInput" placeholder="Ganti dengan..." class="second-input"><div class="search-meta" id="searchMeta">Cari dalam file aktif</div><div class="modal-actions"><button class="outline-btn" id="searchClose">Tutup</button><button class="outline-btn" id="findNext">Berikutnya</button><button class="primary-btn" id="replaceAll">Ganti semua</button></div></div></dialog>
+  <dialog id="fileActionsDialog" class="modal"><div class="dialog-inner"><h2>Aksi file</h2><p>Pilih tindakan untuk file yang dipilih. File dengan perubahan belum disimpan tidak dapat dihapus.</p><div class="modal-actions"><button id="fileCancel" class="outline-btn">Batal</button><button id="fileRename" class="outline-btn">Ganti nama</button><button id="fileDelete" class="danger-btn">Hapus</button></div></div></dialog>
   <dialog id="commandDialog" class="modal command-modal"><div class="dialog-inner"><div class="command-heading"><span data-icon="command"></span><input id="commandQuery" placeholder="Ketik perintah..." autocomplete="off"></div><div id="commandResults" class="command-results"></div></div></dialog>
   <dialog id="settingsDialog" class="modal"><div class="dialog-inner"><h2>Pengaturan editor</h2><div class="setting-row"><span>Tema terang</span><input id="lightTheme" type="checkbox"></div><div class="setting-row"><span>Word wrap</span><input id="wordWrap" type="checkbox"></div><div class="setting-row"><span>Ukuran teks</span><input type="range" id="fontSize" min="12" max="22" value="14"><span id="fontSizeLabel">14px</span></div><div class="modal-actions"><button id="settingsClose" class="primary-btn">Selesai</button></div></div></dialog>
   <input id="browserFiles" type="file" multiple hidden>

@@ -1,5 +1,5 @@
 'use strict';
-// NQ Code 0.1: offline-first VS Code-inspired Android editing interface.
+// NQ Code 1.0.0-alpha.1 — offline-first Android source editor.
 const $ = id => document.getElementById(id);
 const iconPaths = {
   menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
@@ -46,7 +46,7 @@ const textBytes = str => {
 const bytesText = b64 => {
   const raw=atob(b64);const bytes=new Uint8Array(raw.length);
   for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
-  return new TextDecoder('utf-8').decode(bytes);
+  return new TextDecoder('utf-8',{ignoreBOM:true}).decode(bytes);
 };
 const seedFiles = {
   'demo:/app/Main.kt': `package dev.nolqu.sample
@@ -115,10 +115,22 @@ const state = {
   expanded:new Set(['demo:/','demo:/app']), folders:new Map(), tabs:[], active:null,
   theme:localStorage.getItem('nq-theme')||'dark', wrap:localStorage.getItem('nq-wrap')==='true',
   font:Number(localStorage.getItem('nq-font')||14), pendingSave:null,
-  searchAt:0, dialogAction:null, hasAndroid:false
+  searchAt:0, dialogAction:null, hasAndroid:false, entryTarget:null, pendingWrites:[], pendingSaveAs:null
 };
-const saveDemo = () => {try{localStorage.setItem('nq-demo-files',JSON.stringify(demoFiles));localStorage.setItem('nq-demo-dirs',JSON.stringify(demoDirs));}catch{toast('Penyimpanan browser penuh.');}};
-const persist = () => {try{localStorage.setItem('nq-open-tabs',JSON.stringify({tabs:state.tabs.map(t=>({...t, text:t.text.slice(0,250000),saved:t.saved.slice(0,250000)})),active:state.active}));}catch{}};
+let demoSaveTimer, tabSaveTimer;
+const flushDemo = () => {clearTimeout(demoSaveTimer);try{localStorage.setItem('nq-demo-files',JSON.stringify(demoFiles));localStorage.setItem('nq-demo-dirs',JSON.stringify(demoDirs));}catch{toast('Penyimpanan browser penuh, ekspor file agar tidak hilang.');}};
+const saveDemo = () => {clearTimeout(demoSaveTimer);demoSaveTimer=setTimeout(flushDemo,300);};
+const flushTabs = () => {
+  clearTimeout(tabSaveTimer);
+  try {
+    // Never silently truncate unsaved documents: keep complete small buffers only.
+    const tabs=state.tabs.filter(t=>t.text.length<=450000 && t.saved.length<=450000).slice(-12);
+    localStorage.setItem('nq-open-tabs',JSON.stringify({tabs,active:state.active}));
+    if(state.tabs.some(t=>t.text!==t.saved && !tabs.includes(t)))
+      $('statusInfo').textContent='Large unsaved file: save to disk';
+  } catch {toast('Cadangan tab penuh. Simpan file ke penyimpanan Android.');}
+};
+const persist = () => {clearTimeout(tabSaveTimer);tabSaveTimer=setTimeout(flushTabs,300);};
 const activeTab = () => state.tabs.find(t=>t.id===state.active);
 const toast = msg => {const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),2700);};
 const badgeName = uri => (uri.split(':').pop().split('/').filter(Boolean).pop() || 'WORKSPACE').toUpperCase();
@@ -164,6 +176,15 @@ function renderTree(){
       const ico=document.createElement('span');ico.className='file-type '+(entry.folder?'dir':colorExt(entry.name));ico.innerHTML=svg(entry.folder?'folder':'file');
       const title=document.createElement('span');title.textContent=entry.name;
       row.append(caret,ico,title);
+      if(!entry.folder){
+        const more=document.createElement('span');more.className='entry-more';more.title='Aksi file';
+        more.setAttribute('role','button');more.setAttribute('aria-label','Aksi file '+entry.name);
+        more.setAttribute('tabindex','0');more.innerHTML=svg('more-horizontal');
+        const menu=e=>{e.stopPropagation();openFileActions(entry);};
+        more.addEventListener('click',menu);
+        more.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();menu(e);}});
+        row.append(more);
+      }
       row.addEventListener('click',()=>{
         if(entry.folder){state.selectedFolder=entry.uri;if(state.expanded.has(entry.uri))state.expanded.delete(entry.uri);else{state.expanded.add(entry.uri);if(!state.folders.has(entry.uri))refreshFolder(entry.uri);}renderTree();}
         else openEntry(entry);
@@ -175,6 +196,53 @@ function renderTree(){
   add(state.root,0);
   if(!tree.children.length){let note=document.createElement('div');note.className='tree-empty';note.textContent='Folder kosong. Gunakan + untuk membuat file baru.';tree.append(note);}
 }
+function parentForEntry(uri){
+  for(const [parent,items] of state.folders){if(items.some(item=>item.uri===uri))return parent;}
+  return state.root;
+}
+function openFileActions(entry){state.entryTarget={...entry,parent:parentForEntry(entry.uri)};openModal('fileActionsDialog');}
+function renameEntry(){
+  const target=state.entryTarget;if(!target)return;
+  $('fileActionsDialog').close();state.dialogAction='rename';
+  $('textDialogTitle').textContent='Ganti nama file';
+  $('textDialogDescription').textContent='Ekstensi file dapat diubah';
+  $('textDialogInput').value=target.name;
+  $('textDialog').showModal();setTimeout(()=>$('textDialogInput').select(),30);
+}
+function applyRename(name){
+  const target=state.entryTarget;if(!target)return;
+  name=name.trim();
+  if(!name || /[\\/]/.test(name) || name==='.' || name==='..'){toast('Nama file tidak valid.');return;}
+  if(target.uri.startsWith('demo:')){
+    const updated=target.parent.replace(/\/$/,'')+'/'+name;
+    if(updated!==target.uri && (Object.prototype.hasOwnProperty.call(demoFiles,updated)||demoDirs.includes(updated))){toast('Nama sudah digunakan.');return;}
+    demoFiles[updated]=demoFiles[target.uri];delete demoFiles[target.uri];saveDemo();
+    applyRenamed(target.uri,updated,name,target.parent);
+  }else if(native())window.NQAndroid.renameFile(target.uri,name);
+}
+function requestDelete(){
+  const target=state.entryTarget;if(!target)return;
+  $('fileActionsDialog').close();
+  if(state.tabs.some(t=>t.uri===target.uri && t.text!==t.saved)){
+    toast('File masih memiliki perubahan. Simpan dahulu.');return;
+  }
+  if(!confirm('Hapus file "'+target.name+'" secara permanen? Tindakan ini tidak dapat dibatalkan.'))return;
+  if(target.uri.startsWith('demo:')){delete demoFiles[target.uri];saveDemo();applyDeleted(target.uri,target.parent);}
+  else if(native())window.NQAndroid.deleteFile(target.uri);
+}
+function applyRenamed(oldUri,newUri,name,parent){
+  state.tabs.filter(t=>t.uri===oldUri).forEach(t=>{t.uri=newUri;t.name=name;});
+  for(const items of state.folders.values())items.filter(item=>item.uri===oldUri).forEach(item=>{item.uri=newUri;item.name=name;});
+  refreshFolder(parent||state.root);renderTabs();loadEditor();renderTree();persist();toast('Nama berhasil diubah: '+name);
+}
+function applyDeleted(uri,parent){
+  for(const items of state.folders.values()){
+    const index=items.findIndex(item=>item.uri===uri);if(index>=0)items.splice(index,1);
+  }
+  state.tabs=state.tabs.filter(t=>t.uri!==uri);
+  if(!state.tabs.some(t=>t.id===state.active))state.active=state.tabs[0]?.id||null;
+  refreshFolder(parent||state.root);renderTabs();loadEditor();renderTree();persist();toast('File dihapus.');
+}
 function openEntry(entry){
   const existing=state.tabs.find(t=>t.uri===entry.uri);
   if(existing){selectTab(existing.id);return;}
@@ -183,7 +251,11 @@ function openEntry(entry){
 }
 function openTab(name,text,uri=null){
   const matched=uri&&state.tabs.find(t=>t.uri===uri);if(matched){selectTab(matched.id);return;}
-  const tab={id:'tab-'+Date.now()+'-'+Math.random().toString(16).slice(2),uri,name,text,saved:text,selectionStart:0,selectionEnd:0,scrollTop:0,scrollLeft:0};
+  const bom=text.startsWith('\uFEFF');
+  if(bom)text=text.slice(1);
+  const lineEnding=text.includes('\r\n')?'CRLF':'LF';
+  text=text.replace(/\r\n/g,'\n');
+  const tab={bom,lineEnding,id:'tab-'+Date.now()+'-'+Math.random().toString(16).slice(2),uri,name,text,saved:text,selectionStart:0,selectionEnd:0,scrollTop:0,scrollLeft:0};
   state.tabs.push(tab);selectTab(tab.id);persist();closeSidebar();
 }
 function selectTab(id){
@@ -281,17 +353,23 @@ function createEntry(folder,name){
 }
 function openFilePicker(){if(native())window.NQAndroid.openDocument();else $('browserFiles').click();}
 function openFolderPicker(){if(native())window.NQAndroid.openFolder();else toast('Mode demo browser. Pilih folder dari aplikasi Android untuk akses penyimpanan.');}
+function serializeTab(tab){
+  const text=tab.lineEnding==='CRLF'?tab.text.replace(/\r?\n/g,'\r\n'):tab.text;
+  return (tab.bom?'\uFEFF':'')+text;
+}
 function saveActive(saveAs=false){
   const tab=activeTab();if(!tab){toast('Belum ada file aktif.');return;}
-  if(native() && (!tab.uri || saveAs)){
-    state.pendingSave=tab.id;
-    window.NQAndroid.saveAs(tab.name,textBytes(tab.text));
+  if(native() && (!tab.uri || saveAs || tab.uri.startsWith('demo:'))){
+    if(state.pendingSaveAs){toast('Selesaikan dialog Simpan Sebagai dahulu.');return;}
+    state.pendingSaveAs={id:tab.id,snapshot:tab.text};
+    window.NQAndroid.saveAs(tab.name,textBytes(serializeTab(tab)));
   }else if(native()&&!tab.uri.startsWith('demo:')){
-    window.NQAndroid.save(tab.uri,textBytes(tab.text));
+    state.pendingWrites.push({id:tab.id,uri:tab.uri,snapshot:tab.text});
+    window.NQAndroid.save(tab.uri,textBytes(serializeTab(tab)));
   }else{
     if(tab.uri?.startsWith('demo:')){demoFiles[tab.uri]=tab.text;saveDemo();}
     if(saveAs || !tab.uri){
-      const blob=new Blob([tab.text],{type:'text/plain;charset=utf-8'});
+      const blob=new Blob([serializeTab(tab)],{type:'text/plain;charset=utf-8'});
       const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=tab.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2500);
     }
     tab.saved=tab.text;renderTabs();updatePosition();persist();toast('Tersimpan dalam demo lokal'+(!tab.uri?' / unduhan':'')+'.');
@@ -367,14 +445,15 @@ function attach(){
   $('textDialogCancel').onclick=()=>$('textDialog').close();
   $('textForm').addEventListener('submit',e=>{
     if(e.submitter?.value==='cancel')return;
-    const val=$('textDialogInput').value;const folder=state.dialogAction==='folder';
-    setTimeout(()=>createEntry(folder,val),0);
+    const val=$('textDialogInput').value;const action=state.dialogAction;
+    setTimeout(()=>action==='rename'?applyRename(val):createEntry(action==='folder',val),0);
   });
   $('findNext').onclick=findNext;$('replaceAll').onclick=replaceAll;$('searchClose').onclick=()=>$('searchDialog').close();
   $('findInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();findNext();}});
   $('commandQuery').addEventListener('input',e=>renderCommands(e.target.value));
   $('commandQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('commandResults').querySelector('.command-item')?.click();}});
   $('settingsClose').onclick=()=>$('settingsDialog').close();
+  $('fileRename').onclick=renameEntry; $('fileDelete').onclick=requestDelete; $('fileCancel').onclick=()=>$('fileActionsDialog').close();
   $('lightTheme').onchange=e=>{state.theme=e.target.checked?'light':'dark';localStorage.setItem('nq-theme',state.theme);applySettings();};
   $('wordWrap').onchange=e=>{state.wrap=e.target.checked;localStorage.setItem('nq-wrap',state.wrap);applySettings();};
   $('fontSize').oninput=e=>{state.font=+e.target.value;localStorage.setItem('nq-font',state.font);applySettings();};
@@ -383,6 +462,8 @@ function attach(){
       try{openTab(file.name,await file.text(),null);}catch{toast('Gagal membaca '+file.name);}}
     e.target.value='';
   });
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){flushTabs();flushDemo();}});
+  window.addEventListener('pagehide',()=>{flushTabs();flushDemo();});
   window.addEventListener('keydown',e=>{
     if((e.ctrlKey||e.metaKey) && !e.altKey){
       const k=e.key.toLowerCase();
@@ -401,16 +482,20 @@ window.NativeEvents={
   directory(parent,entries){state.folders.set(parent,entries);renderTree();},
   fileOpened(uri,name,encoded){try{openTab(name,bytesText(encoded),uri);}catch(e){toast('File tidak bisa dibuka: '+e.message);}},
   saved(uri,name,newFile){
-    let tab;
-    if(newFile && state.pendingSave)tab=state.tabs.find(t=>t.id===state.pendingSave);
-    if(!tab)tab=state.tabs.find(t=>t.uri===uri)||activeTab();
-    if(tab){tab.uri=uri;tab.name=name;tab.saved=tab.text;}
-    state.pendingSave=null;renderTabs();updatePosition();persist();toast('Berhasil disimpan: '+name);
+    let operation;
+    if(newFile){operation=state.pendingSaveAs;state.pendingSaveAs=null;}
+    else {const index=state.pendingWrites.findIndex(w=>w.uri===uri);if(index>=0)operation=state.pendingWrites.splice(index,1)[0];}
+    if(!operation){toast('File disimpan, tetapi tab sudah tidak tersedia.');return;}
+    const tab=state.tabs.find(t=>t.id===operation.id);
+    if(tab){tab.uri=uri;tab.name=name;tab.saved=operation.snapshot;}
+    renderTabs();updatePosition();persist();toast('Berhasil disimpan: '+name);
     if(!state.root.startsWith('demo:'))refreshFolder(state.root);
   },
   created(parent,uri,name,folder){refreshFolder(parent);if(folder){state.expanded.add(parent);toast('Folder dibuat: '+name);}else{toast('File dibuat: '+name);window.NQAndroid.openUri(uri);}},
-  saveCancelled(){state.pendingSave=null;},
-  error(message){toast('Gagal: '+message);state.pendingSave=null;}
+  renamed(oldUri,newUri,name){applyRenamed(oldUri,newUri,name,state.entryTarget?.parent);},
+  deleted(uri){applyDeleted(uri,state.entryTarget?.parent);},
+  saveCancelled(){state.pendingSaveAs=null;toast('Simpan Sebagai dibatalkan.');},
+  error(message){toast('Gagal: '+message);state.pendingSaveAs=null;state.pendingWrites.shift();}
 };
 window.App={back(){
   const dialog=document.querySelector('dialog[open]');if(dialog){dialog.close();return;}
@@ -425,5 +510,5 @@ window.App={back(){
     state.active=state.tabs.some(t=>t.id===stored.active)?stored.active:state.tabs[0]?.id||null;}
   setWorkspace('demo:/','DEMO WORKSPACE');
   renderTabs();loadEditor();
-  if(!state.tabs.length)openEntry({uri:'demo:/app/Main.kt',name:'Main.kt',folder:false});
+  if(!state.tabs.length && !native())openEntry({uri:'demo:/app/Main.kt',name:'Main.kt',folder:false});
 })();

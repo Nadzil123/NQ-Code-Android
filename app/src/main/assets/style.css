@@ -40,3 +40,11 @@ body.wrap #codeInput,body.wrap .syntax-pane pre{white-space:pre-wrap;overflow-wr
 @media (max-width:380px){.project-pill{display:none}.top-actions .icon-btn{width:29px}.welcome p{font-size:12px}}
 
 #welcome[hidden]{display:none!important}
+
+/* Alpha: file explorer context controls and destructive action affordance. */
+.file-row .entry-more{margin-left:auto;flex:none;display:flex;align-items:center;justify-content:center;border-radius:5px;width:26px;height:26px;color:var(--muted)}
+.file-row .entry-more:hover,.file-row .entry-more:focus-visible{background:var(--surface);color:var(--heading);outline:1px solid var(--accent)}
+.file-row .entry-more svg{width:17px;height:17px}
+.danger-btn{background:#9d343e;color:white;border:1px solid #b54952;border-radius:7px;padding:10px 15px}
+.danger-btn:hover{background:#b3404a}
+.file-row>span:nth-child(3){min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis}

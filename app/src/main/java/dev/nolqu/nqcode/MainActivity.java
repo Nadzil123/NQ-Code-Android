@@ -10,6 +10,8 @@ import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -19,9 +21,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -53,6 +59,9 @@ public class MainActivity extends Activity {
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        settings.setAllowContentAccess(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        web.setWebChromeClient(new WebChromeClient());
         settings.setDefaultTextEncodingName("UTF-8");
         settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(false);
@@ -60,6 +69,11 @@ public class MainActivity extends Activity {
         settings.setBuiltInZoomControls(false);
         web.addJavascriptInterface(new AndroidBridge(), "NQAndroid");
         web.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.startsWith("file:///android_asset/") && !url.contains("..")) return super.shouldInterceptRequest(view, request);
+                return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 return !url.startsWith("file:///android_asset/");
@@ -106,6 +120,15 @@ public class MainActivity extends Activity {
                 }
                 byte[] bytes = out.toByteArray();
                 for (byte b : bytes) if (b == 0) throw new Exception("File biner tidak didukung.");
+                // Never silently corrupt a non-UTF-8 source file on save.
+                try {
+                    StandardCharsets.UTF_8.newDecoder()
+                            .onMalformedInput(CodingErrorAction.REPORT)
+                            .onUnmappableCharacter(CodingErrorAction.REPORT)
+                            .decode(ByteBuffer.wrap(bytes));
+                } catch (CharacterCodingException e) {
+                    throw new Exception("File bukan UTF-8 yang valid. Konversikan encoding dahulu.");
+                }
                 String encoded = Base64.encodeToString(bytes, Base64.NO_WRAP);
                 emit("NativeEvents.fileOpened(" + JSONObject.quote(uri.toString()) + "," +
                         JSONObject.quote(displayName(uri)) + "," + JSONObject.quote(encoded) + ")");
@@ -165,7 +188,11 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void openUri(String uri) {
-            readFile(Uri.parse(uri));
+            try {
+                Uri target = Uri.parse(uri);
+                if (!"content".equals(target.getScheme())) throw new Exception("URI tidak didukung.");
+                readFile(target);
+            } catch (Exception e) { failure(e.getMessage()); }
         }
         @JavascriptInterface public void listFolder(String parent) {
             io.execute(() -> {
@@ -198,7 +225,11 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void save(String uri, String encoded) {
-            writeFile(Uri.parse(uri), encoded, false);
+            try {
+                Uri target = Uri.parse(uri);
+                if (!"content".equals(target.getScheme())) throw new Exception("URI tidak didukung.");
+                writeFile(target, encoded, false);
+            } catch (Exception e) { failure(e.getMessage()); }
         }
         @JavascriptInterface public void saveAs(String suggestedName, String encoded) {
             runOnUiThread(() -> {
@@ -210,11 +241,36 @@ public class MainActivity extends Activity {
                 startActivityForResult(i, CREATE_DOCUMENT);
             });
         }
+        @JavascriptInterface public void renameFile(String uri, String newName) {
+            io.execute(() -> {
+                try {
+                    if (newName == null || newName.trim().isEmpty() || newName.contains("/") || newName.contains("\\"))
+                        throw new Exception("Nama file tidak valid.");
+                    Uri original = Uri.parse(uri);
+                    if (!"content".equals(original.getScheme())) throw new Exception("URI tidak didukung.");
+                    Uri renamed = DocumentsContract.renameDocument(getContentResolver(), original, newName.trim());
+                    if (renamed == null) throw new Exception("Penyedia file tidak mendukung ganti nama.");
+                    emit("NativeEvents.renamed(" + JSONObject.quote(uri) + "," +
+                            JSONObject.quote(renamed.toString()) + "," + JSONObject.quote(displayName(renamed)) + ")");
+                } catch (Exception e) { failure(e.getMessage()); }
+            });
+        }
+        @JavascriptInterface public void deleteFile(String uri) {
+            io.execute(() -> {
+                try {
+                    Uri target = Uri.parse(uri);
+                    if (!"content".equals(target.getScheme())) throw new Exception("URI tidak didukung.");
+                    if (!DocumentsContract.deleteDocument(getContentResolver(), target))
+                        throw new Exception("Penyedia file menolak penghapusan.");
+                    emit("NativeEvents.deleted(" + JSONObject.quote(uri) + ")");
+                } catch (Exception e) { failure(e.getMessage()); }
+            });
+        }
         @JavascriptInterface public void create(String parent, String name, boolean folder) {
             io.execute(() -> {
                 try {
                     if (workspaceTree == null) throw new Exception("Buka folder proyek terlebih dahulu.");
-                    if (name.trim().isEmpty() || name.contains("/") || name.contains("\\"))
+                    if (name == null || name.trim().isEmpty() || name.contains("/") || name.contains("\\"))
                         throw new Exception("Nama file/folder tidak valid.");
                     Uri made = DocumentsContract.createDocument(getContentResolver(), Uri.parse(parent),
                             folder ? DocumentsContract.Document.MIME_TYPE_DIR : "application/octet-stream", name);

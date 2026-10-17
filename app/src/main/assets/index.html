@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#101319">
+  <title>NQ Code — Android IDE</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="dark">
+  <div id="app">
+    <header class="topbar">
+      <div class="brand-wrap">
+        <button class="icon-btn mobile-menu" id="toggleExplorer" title="Explorer" aria-label="Explorer"><span data-icon="menu"></span></button>
+        <span class="brand-symbol"><span data-icon="code"></span></span>
+        <div class="brand">NQ <strong>CODE</strong><small>ANDROID EDITION</small></div>
+      </div>
+      <div class="project-pill"><span class="pulse"></span><span id="projectTitle">DEMO WORKSPACE</span><span data-icon="chevron-down"></span></div>
+      <div class="top-actions">
+        <button class="icon-btn" id="searchButton" title="Cari (Ctrl+F)"><span data-icon="search"></span></button>
+        <button class="icon-btn" id="openButton" title="Buka file"><span data-icon="file-plus"></span></button>
+        <button class="icon-btn" id="saveButton" title="Simpan (Ctrl+S)"><span data-icon="save"></span></button>
+        <button class="icon-btn" id="commandButton" title="Command palette"><span data-icon="command"></span></button>
+      </div>
+    </header>
+
+    <div class="main-layout">
+      <nav class="activity-rail" aria-label="Navigasi utama">
+        <button class="rail-btn active" id="railExplorer" title="Explorer"><span data-icon="files"></span></button>
+        <button class="rail-btn" id="railSearch" title="Cari"><span data-icon="search"></span></button>
+        <div class="rail-spacer"></div>
+        <button class="rail-btn" id="railSettings" title="Pengaturan"><span data-icon="settings"></span></button>
+      </nav>
+
+      <div class="scrim" id="scrim"></div>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header"><span>EXPLORER</span><div class="sidebar-actions">
+          <button class="mini-btn" id="newFileButton" title="File baru"><span data-icon="file-plus"></span></button>
+          <button class="mini-btn" id="newFolderButton" title="Folder baru"><span data-icon="folder-plus"></span></button>
+          <button class="mini-btn" id="refreshButton" title="Segarkan"><span data-icon="refresh"></span></button>
+        </div></div>
+        <div class="workspace-title" id="workspaceTitle"><span data-icon="chevron-down"></span><span>DEMO WORKSPACE</span><span class="workspace-more" data-icon="more-horizontal"></span></div>
+        <div id="fileTree" class="file-tree"></div>
+        <div class="sidebar-bottom">
+          <button id="openFolderButton" class="sidebar-primary"><span data-icon="folder-open"></span> Buka folder proyek</button>
+          <button id="importFileButton" class="sidebar-secondary"><span data-icon="upload"></span> Buka file</button>
+        </div>
+      </aside>
+
+      <main class="main-editor" id="mainEditor">
+        <div id="tabbar" class="tabs" role="tablist"></div>
+        <div class="breadcrumbs" id="breadcrumbs"><span data-icon="folder"></span><span>Workspace</span><span data-icon="chevron-right"></span><b>Mulai mengedit</b></div>
+        <div class="editor-body" id="editorBody">
+          <section class="welcome" id="welcome">
+            <div class="welcome-emblem"><span data-icon="code"></span></div>
+            <div class="welcome-tag">YOUR MOBILE DEVELOPMENT SPACE</div>
+            <h1>Kode. Di mana saja<span class="period">.</span></h1>
+            <p>Editor yang terasa seperti desktop, dirancang untuk sentuhan. Bangun ide berikutnya langsung dari Android.</p>
+            <div class="welcome-actions">
+              <button id="welcomeNew" class="primary-btn"><span data-icon="plus"></span> File baru</button>
+              <button id="welcomeFolder" class="outline-btn"><span data-icon="folder-open"></span> Buka folder</button>
+            </div>
+            <div class="welcome-hint"><span data-icon="keyboard"></span> Ctrl+P untuk command palette · Ctrl+S untuk simpan</div>
+          </section>
+          <div class="code-editor" id="codeEditor" hidden>
+            <div class="line-gutter" id="gutter"><pre id="lineNumbers">1</pre></div>
+            <div class="syntax-pane" id="syntaxPane"><pre id="syntaxText"></pre></div>
+            <textarea id="codeInput" aria-label="Editor kode" autocomplete="off" autocapitalize="off" spellcheck="false" wrap="off"></textarea>
+          </div>
+        </div>
+        <div class="quick-keys" id="quickKeys">
+          <button data-insert="\t">Tab ↹</button><button data-insert="{">{</button><button data-insert="}">}</button>
+          <button data-insert="(">(</button><button data-insert=")">)</button><button data-insert="[">[</button><button data-insert="]">]</button>
+          <button data-insert=";">;</button><button data-insert="=">=</button><button data-insert="&lt;">&lt;</button><button data-insert="&gt;">&gt;</button><button data-insert="/">/</button>
+          <button data-insert='"'>"</button><button data-insert="'">'</button>
+          <button id="undoButton" title="Undo"><span data-icon="undo"></span></button>
+        </div>
+      </main>
+    </div>
+    <footer class="statusbar">
+      <div class="status-left"><span class="branch"><span data-icon="git-branch"></span> local</span><span id="statusInfo"><span data-icon="check"></span> Ready</span></div>
+      <div class="status-right"><span id="statusPosition">Ln 1, Col 1</span><span id="statusLanguage">Plain Text</span><span class="status-encoding">UTF-8</span><span class="status-online">●</span></div>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+  <dialog id="textDialog" class="modal"><form method="dialog" id="textForm"><h2 id="textDialogTitle">File baru</h2><p id="textDialogDescription">Masukkan nama</p><input id="textDialogInput" type="text" autocomplete="off" required maxlength="160"><div class="modal-actions"><button type="button" id="textDialogCancel" class="outline-btn">Batal</button><button type="submit" id="textDialogOkay" value="ok" class="primary-btn">Buat</button></div></form></dialog>
+  <dialog id="searchDialog" class="modal"><div class="dialog-inner"><h2>Cari &amp; ganti</h2><input id="findInput" placeholder="Temukan teks..."><input id="replaceInput" placeholder="Ganti dengan..." class="second-input"><div class="search-meta" id="searchMeta">Cari dalam file aktif</div><div class="modal-actions"><button class="outline-btn" id="searchClose">Tutup</button><button class="outline-btn" id="findNext">Berikutnya</button><button class="primary-btn" id="replaceAll">Ganti semua</button></div></div></dialog>
+  <dialog id="commandDialog" class="modal command-modal"><div class="dialog-inner"><div class="command-heading"><span data-icon="command"></span><input id="commandQuery" placeholder="Ketik perintah..." autocomplete="off"></div><div id="commandResults" class="command-results"></div></div></dialog>
+  <dialog id="settingsDialog" class="modal"><div class="dialog-inner"><h2>Pengaturan editor</h2><div class="setting-row"><span>Tema terang</span><input id="lightTheme" type="checkbox"></div><div class="setting-row"><span>Word wrap</span><input id="wordWrap" type="checkbox"></div><div class="setting-row"><span>Ukuran teks</span><input type="range" id="fontSize" min="12" max="22" value="14"><span id="fontSizeLabel">14px</span></div><div class="modal-actions"><button id="settingsClose" class="primary-btn">Selesai</button></div></div></dialog>
+  <input id="browserFiles" type="file" multiple hidden>
+  <script src="app.js"></script>
+</body>
+</html>

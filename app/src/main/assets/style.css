@@ -48,3 +48,11 @@ body.wrap #codeInput,body.wrap .syntax-pane pre{white-space:pre-wrap;overflow-wr
 .danger-btn{background:#9d343e;color:white;border:1px solid #b54952;border-radius:7px;padding:10px 15px}
 .danger-btn:hover{background:#b3404a}
 .file-row>span:nth-child(3){min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis}
+
+/* 1.0.0-alpha.2: more language-aware token classes and touch-friendly controls. */
+.code-heading{color:#e3bc73;font-weight:650}.code-property{color:#83c6f0}.code-decorator{color:#e7b76e}
+body[data-theme="light"] .code-heading{color:#94682c}body[data-theme="light"] .code-property{color:#1e6a9c}body[data-theme="light"] .code-decorator{color:#9c6430}
+#statusLanguage{background:transparent;border:1px solid transparent;border-radius:5px;color:inherit;padding:3px 7px;cursor:pointer;max-width:130px;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;font-size:inherit}
+#statusLanguage:hover,#statusLanguage:focus-visible{border-color:var(--accent);color:var(--accent)}
+#languageSelect{width:100%;min-height:42px;padding:8px 12px;background:var(--surface);color:var(--text);border:1px solid var(--edge);border-radius:8px}
+#gotoNumber{width:100%;min-height:42px;padding:8px 12px;background:var(--surface);color:var(--text);border:1px solid var(--edge);border-radius:8px}

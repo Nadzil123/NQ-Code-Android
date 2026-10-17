@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <meta name="theme-color" content="#101319">
-  <title>NQ Code — Android IDE</title>
+  <title>NQ Code — Android Code Editor</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-theme="dark">
@@ -13,7 +13,7 @@
       <div class="brand-wrap">
         <button class="icon-btn mobile-menu" id="toggleExplorer" title="Explorer" aria-label="Explorer"><span data-icon="menu"></span></button>
         <span class="brand-symbol"><span data-icon="code"></span></span>
-        <div class="brand">NQ <strong>CODE</strong><small>1.0.0-alpha.1</small></div>
+        <div class="brand">NQ <strong>CODE</strong><small>1.0.0-alpha.2</small></div>
       </div>
       <div class="project-pill"><span class="pulse"></span><span id="projectTitle">DEMO WORKSPACE</span><span data-icon="chevron-down"></span></div>
       <div class="top-actions">
@@ -79,7 +79,7 @@
     </div>
     <footer class="statusbar">
       <div class="status-left"><span class="branch"><span data-icon="git-branch"></span> local</span><span id="statusInfo"><span data-icon="check"></span> Ready</span></div>
-      <div class="status-right"><span id="statusPosition">Ln 1, Col 1</span><span id="statusLanguage">Plain Text</span><span class="status-encoding">UTF-8</span><span class="status-online">●</span></div>
+      <div class="status-right"><span id="statusPosition">Ln 1, Col 1</span><button id="statusLanguage" type="button" title="Pilih bahasa sintaks">Plain Text</button><span class="status-encoding">UTF-8</span><span class="status-online">●</span></div>
     </footer>
   </div>
 
@@ -88,8 +88,11 @@
   <dialog id="searchDialog" class="modal"><div class="dialog-inner"><h2>Cari &amp; ganti</h2><input id="findInput" placeholder="Temukan teks..."><input id="replaceInput" placeholder="Ganti dengan..." class="second-input"><div class="search-meta" id="searchMeta">Cari dalam file aktif</div><div class="modal-actions"><button class="outline-btn" id="searchClose">Tutup</button><button class="outline-btn" id="findNext">Berikutnya</button><button class="primary-btn" id="replaceAll">Ganti semua</button></div></div></dialog>
   <dialog id="fileActionsDialog" class="modal"><div class="dialog-inner"><h2>Aksi file</h2><p>Pilih tindakan untuk file yang dipilih. File dengan perubahan belum disimpan tidak dapat dihapus.</p><div class="modal-actions"><button id="fileCancel" class="outline-btn">Batal</button><button id="fileRename" class="outline-btn">Ganti nama</button><button id="fileDelete" class="danger-btn">Hapus</button></div></div></dialog>
   <dialog id="commandDialog" class="modal command-modal"><div class="dialog-inner"><div class="command-heading"><span data-icon="command"></span><input id="commandQuery" placeholder="Ketik perintah..." autocomplete="off"></div><div id="commandResults" class="command-results"></div></div></dialog>
-  <dialog id="settingsDialog" class="modal"><div class="dialog-inner"><h2>Pengaturan editor</h2><div class="setting-row"><span>Tema terang</span><input id="lightTheme" type="checkbox"></div><div class="setting-row"><span>Word wrap</span><input id="wordWrap" type="checkbox"></div><div class="setting-row"><span>Ukuran teks</span><input type="range" id="fontSize" min="12" max="22" value="14"><span id="fontSizeLabel">14px</span></div><div class="modal-actions"><button id="settingsClose" class="primary-btn">Selesai</button></div></div></dialog>
+  <dialog id="settingsDialog" class="modal"><div class="dialog-inner"><h2>Pengaturan editor</h2><div class="setting-row"><span>Tema terang</span><input id="lightTheme" type="checkbox"></div><div class="setting-row"><span>Word wrap</span><input id="wordWrap" type="checkbox"></div><div class="setting-row"><span>Tutup kurung otomatis</span><input id="autoPairs" type="checkbox" checked></div><div class="setting-row"><span>Ukuran teks</span><input type="range" id="fontSize" min="12" max="22" value="14"><span id="fontSizeLabel">14px</span></div><div class="modal-actions"><button id="settingsClose" class="primary-btn">Selesai</button></div></div></dialog>
+  <dialog id="languageDialog" class="modal"><div class="dialog-inner"><h2>Bahasa pemrograman</h2><p>Pilih bahasa untuk pewarnaan kode pada tab ini.</p><select id="languageSelect" aria-label="Bahasa file"><option value="auto">Otomatis (ekstensi file)</option></select><div class="modal-actions"><button id="languageCancel" class="outline-btn">Batal</button><button id="languageOkay" class="primary-btn">Terapkan</button></div></div></dialog>
+  <dialog id="gotoDialog" class="modal"><div class="dialog-inner"><h2>Menuju baris</h2><input id="gotoNumber" type="number" min="1" step="1" placeholder="Nomor baris" aria-label="Nomor baris"><div class="modal-actions"><button id="gotoCancel" class="outline-btn">Batal</button><button id="gotoConfirm" class="primary-btn">Pergi</button></div></div></dialog>
   <input id="browserFiles" type="file" multiple hidden>
+  <script src="language.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# NQ Code — Android Source Editor 1.0.0-alpha.1
+# NQ Code — Android Source Editor 1.0.0-alpha.2
 
 Aplikasi editor kode Android asli (native WebView shell + HTML/CSS/JavaScript UI) dengan antarmuka ala VS Code. Tampilan dirancang untuk **layar sentuh maupun tablet**, **offline**, dan **tanpa akun**.
 
@@ -10,7 +10,7 @@ Aplikasi editor kode Android asli (native WebView shell + HTML/CSS/JavaScript UI
 - Buka, baca, edit, dan simpan file teks dari penyimpanan dengan Android **Storage Access Framework (SAF)**.
 - Buat file/folder dalam folder yang dipilih; ganti nama dan hapus file melalui menu Explorer dengan konfirmasi.
 - Simpan Sebagai (Save As), beberapa tab, indikator perubahan belum disimpan (termasuk perubahan yang terjadi saat penulisan asynchronous); pertahankan BOM UTF-8 dan akhiran baris CRLF ketika menyimpan.
-- Syntax highlighting ringan: Kotlin, Java, JavaScript, TypeScript, Python, Rust, HTML, CSS, JSON, dan lain-lain (token sederhana, bukan parser lengkap).
+- Highlighting offline berbasis bahasa: JavaScript, TypeScript, Python, Kotlin, Java, C/C++, Rust, Go, HTML, XML, CSS, JSON, Markdown, Shell, YAML, SQL, TOML, Dart, dan PHP (lexer heuristik, bukan parser lengkap).
 - Nomor baris, posisi kursor, font monospace, simbol cepat untuk keyboard sentuh.
 - Cari, cari berikutnya, ganti semua, command palette (Ctrl+P), pintasan Ctrl+S/O/F/N.
 - Tema terang/gelap, ukuran font, pilihan word wrap.
@@ -23,13 +23,13 @@ Ini **editor kode**, bukan salinan lengkap VS Code. Belum ada terminal, compiler
 
 ## Push perubahan alpha melalui Git lokal
 
-Setelah ZIP diekstrak, jalankan `bash push-alpha.sh` dari folder proyek. Skrip menggunakan Git/`gh` yang sudah diautentikasi untuk meng-clone `main`, membuat branch `release/1.0.0-alpha.1`, menyalin perubahan alpha, menghapus workflow lama `android.yml`, commit, lalu `git push` tanpa `--force`. **`main` tidak berubah** sampai perubahan di-merge. CI debug akan berjalan saat branch `release/**` dipush.
+Setelah ZIP diekstrak, jalankan `bash push-alpha.sh` dari folder proyek. Skrip menggunakan Git/`gh` yang sudah diautentikasi untuk meng-clone `main`, membuat branch `release/1.0.0-alpha.2`, menyalin perubahan alpha, menghapus workflow lama `android.yml`, commit, lalu `git push` tanpa `--force`. **`main` tidak berubah** sampai perubahan di-merge. CI debug akan berjalan saat branch `release/**` dipush.
 
 ## Cara mendapatkan APK tanpa PC (GitHub Actions)
 
 1. Unggah seluruh isi folder proyek ini ke sebuah repository GitHub milik Anda, termasuk folder tersembunyi `.github`.
 2. Buka tab **Actions** di repository, kemudian pilih workflow **NQ Code Android CI** dan **Run workflow**.
-3. Setelah job selesai sukses, buka halaman run dan unduh artifact **NQ-Code-1.0.0-alpha.1-debug-APK**.
+3. Setelah job selesai sukses, buka halaman run dan unduh artifact **NQ-Code-1.0.0-alpha.2-debug-APK**.
 4. Ekstrak ZIP artifact dan instal `app-debug.apk` pada Android. Jangan gunakan APK dari pihak tak dikenal.
 
 Workflow di `.github/workflows/android-apk.yml` menyiapkan Java 17, Android SDK 36, Gradle 9.5, membangun APK debug, lalu mengunggah hasilnya. **Repo versi 0.1.0 telah berhasil membangun APK debug di GitHub Actions**; perubahan alpha ini masih perlu CI dan uji perangkat sebelum didistribusikan.
@@ -90,3 +90,17 @@ NQ-Code-Android/
 Editor berbasis LSP (autocomplete/refactoring), workspace search, integrated terminal yang sesuai kebijakan sandbox Android, akses Git, sistem tema/plugin, editor berbasis CodeMirror, dan integrasi build Android.
 
 License: MIT, lihat `LICENSE`.
+
+
+## Fitur baru 1.0.0-alpha.2
+
+- Ketuk bahasa di status bar untuk memilih grammar pewarnaan per tab. Pilihan Auto mengikuti ekstensi file.
+- `Ctrl+G` atau command palette → **Menuju baris**.
+- `Ctrl+Z` Undo; `Ctrl+Y` / `Ctrl+Shift+Z` Redo (riwayat sesi, tidak dipulihkan setelah aplikasi ditutup).
+- Auto-pair kurung dan kutip bisa dinonaktifkan di Pengaturan; dukungan IME berbeda antar-keyboard.
+- Highlighter sepenuhnya offline (`language.js`), tanpa CDN atau paket jaringan.
+- Dokumen >180.000 karakter tetap dapat diedit tetapi markup berwarna disederhanakan demi performa.
+- Pengujian lokal: `node scripts/validate.mjs && node scripts/language.test.cjs`. Build Android tetap dijalankan melalui GitHub Actions.
+- Format rilis: `main` → CI + device QA → tag `v1.0.0-alpha.2` → build signed → GitHub Release draft pre-release → publikasi setelah QA.
+
+Release notes: `docs/RELEASE_NOTES_alpha2.md`. Full change summary: `CHANGELOG.md`.

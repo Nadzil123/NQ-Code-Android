@@ -19,3 +19,17 @@ Mark each item after testing on a physical Android device, not just in a browser
 - [ ] Run Android lint and build release with signing secrets; verify signed APK installs.
 
 Known limitations: large unsaved buffers may exceed WebView local storage quota; always explicitly save edits. SAF permissions and rename/delete support vary by document provider. Do not select storage root or Download root where Android disallows folder grants.
+
+
+## Alpha 2 acceptance checks
+
+- [ ] Syntax highlight JS/TS, Kotlin/Java, Python, Rust, C/C++, HTML/CSS/JSON, Markdown and Shell sample files on device.
+- [ ] Select language override on one tab; switch tabs and confirm each retains its own override.
+- [ ] Verify script tags pasted in the editor render as harmless text rather than executing.
+- [ ] Test Ctrl+G with a physical keyboard and command palette for Go to Line.
+- [ ] Test Undo/Redo for typing, paste, replacement, auto-pairing and tab switching.
+- [ ] Test auto-pair with Gboard and at least one other keyboard; disable in Settings if IME misbehaves.
+- [ ] Open UTF-8 with BOM and CRLF; edit/save/reopen and compare bytes; verify error handling for non-UTF-8.
+- [ ] Open near-limit files (>=180000 characters): no freeze; plain-text highlight fallback, saved file intact.
+- [ ] Compare scroll and input responsiveness on Android with alpha.1 and alpha.2 (device measurements).
+- [ ] Signed APK installs and edits files with user-granted SAF access; updates from alpha.1 preserve app data and signature.

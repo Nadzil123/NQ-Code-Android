@@ -1,0 +1,35 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {performance}=require('node:perf_hooks');
+const {detect,highlight,languages}=require('../app/src/main/assets/language.js');
+assert.equal(detect('src/main.kt'),'Kotlin');
+assert.equal(detect('src/main.tsx'),'TypeScript');
+assert.equal(detect('Makefile'),'Plain Text');
+assert.equal(detect('.bashrc'),'Shell');
+for(const language of languages){
+ const sample='if true: // hello <b> & <script>alert(1)</script> "x"';
+ const result=highlight(sample,language);
+ assert.ok(result.includes('&lt;script&gt;') || result.includes('&lt;script'),language+' HTML is always escaped');
+ assert.ok(!result.includes('<script>'),language+' must never inject HTML');
+}
+const sampleJS='const url = "https://example.com"; // comment';
+const jsx=highlight(sampleJS,'JavaScript');
+assert.match(jsx,/code-keyword.*const/);
+assert.match(jsx,/code-string.*https:\/\/example\.com/);
+assert.match(jsx,/code-comment.*comment/);
+assert.equal((jsx.match(/code-comment/g)||[]).length,1);
+assert.match(highlight('"name": true','JSON'),/code-property/);
+assert.match(highlight('"name": true','JSON'),/code-keyword.*true/);
+assert.match(highlight('# heading\n`code`','Markdown'),/code-heading/);
+assert.match(highlight('# comment\nprint("ok")','Python'),/code-comment/);
+assert.match(highlight('"""hello\nworld"""','Python'),/code-string/);
+assert.match(highlight('/* a\nb */ let a=1','JavaScript'),/code-comment/);
+assert.match(highlight('<!-- <script> -->','HTML'),/code-comment/);
+assert.match(highlight('<div class="x">','HTML'),/code-tag/);
+assert.match(highlight('-- comment\nSELECT name FROM t','SQL'),/code-comment/);
+assert.match(highlight('pub fn hello() {}','Rust'),/code-keyword/);
+const many='const value = "hello"; // comment\n'.repeat(3000);
+const start=performance.now();const result=highlight(many,'JavaScript');
+const elapsed=performance.now()-start;
+assert.ok(result.length>many.length);
+console.log(`PASS: ${languages.length} offline language modes, lexical regression cases, HTML escape; 100k chars lexed in ${elapsed.toFixed(1)}ms on this runner (not an Android benchmark)`);

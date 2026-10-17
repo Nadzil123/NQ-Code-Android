@@ -1,5 +1,5 @@
 'use strict';
-// NQ Code 1.0.0-alpha.1 — offline-first Android source editor.
+// NQ Code 1.0.0-alpha.2 — offline-first Android source editor.
 const $ = id => document.getElementById(id);
 const iconPaths = {
   menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
@@ -33,10 +33,7 @@ const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${iconPaths[nam
 document.querySelectorAll('[data-icon]').forEach(node => { node.innerHTML = svg(node.dataset.icon); });
 const native = () => !!window.NQAndroid;
 const escaped = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-const lang = n => {
-  const ext = n.split('.').pop().toLowerCase();
-  return ({kt:'Kotlin',kts:'Kotlin',java:'Java',js:'JavaScript',jsx:'React JSX',ts:'TypeScript',tsx:'React TSX',py:'Python',rs:'Rust',go:'Go',c:'C',cpp:'C++',h:'C',hpp:'C++',html:'HTML',css:'CSS',scss:'SCSS',json:'JSON',md:'Markdown',sh:'Shell',bash:'Shell',yml:'YAML',yaml:'YAML',xml:'XML',sql:'SQL',toml:'TOML',dart:'Dart',php:'PHP',txt:'Plain Text'})[ext] || 'Plain Text';
-};
+const lang = name => NQLanguage.detect(name);
 const colorExt = name => ({Kotlin:'kt',Java:'kt',JavaScript:'js',TypeScript:'js',Python:'py',Rust:'kt',HTML:'html',CSS:'css',JSON:'json',Markdown:'md',Shell:'py'})[lang(name)] || 'other';
 const textBytes = str => {
   const array = new TextEncoder().encode(str); let binary='';
@@ -114,7 +111,7 @@ const state = {
   root:'demo:/', name:'DEMO WORKSPACE', selectedFolder:'demo:/',
   expanded:new Set(['demo:/','demo:/app']), folders:new Map(), tabs:[], active:null,
   theme:localStorage.getItem('nq-theme')||'dark', wrap:localStorage.getItem('nq-wrap')==='true',
-  font:Number(localStorage.getItem('nq-font')||14), pendingSave:null,
+  font:Number(localStorage.getItem('nq-font')||14), autoPairs:localStorage.getItem('nq-autopairs')!=='false', pendingSave:null,
   searchAt:0, dialogAction:null, hasAndroid:false, entryTarget:null, pendingWrites:[], pendingSaveAs:null
 };
 let demoSaveTimer, tabSaveTimer;
@@ -124,7 +121,8 @@ const flushTabs = () => {
   clearTimeout(tabSaveTimer);
   try {
     // Never silently truncate unsaved documents: keep complete small buffers only.
-    const tabs=state.tabs.filter(t=>t.text.length<=450000 && t.saved.length<=450000).slice(-12);
+    const tabs=state.tabs.filter(t=>t.text.length<=450000 && t.saved.length<=450000).slice(-12)
+      .map(({undoStack,redoStack,lastEdit,...tab})=>tab);
     localStorage.setItem('nq-open-tabs',JSON.stringify({tabs,active:state.active}));
     if(state.tabs.some(t=>t.text!==t.saved && !tabs.includes(t)))
       $('statusInfo').textContent='Large unsaved file: save to disk';
@@ -139,7 +137,7 @@ function applySettings() {
   document.body.classList.toggle('wrap',state.wrap);
   document.documentElement.style.setProperty('--font-size',state.font+'px');
   document.documentElement.style.setProperty('--line-height',Math.round(state.font*1.65)+'px');
-  $('lightTheme').checked=state.theme==='light';$('wordWrap').checked=state.wrap;
+  $('lightTheme').checked=state.theme==='light';$('wordWrap').checked=state.wrap;$('autoPairs').checked=state.autoPairs;
   $('fontSize').value=state.font;$('fontSizeLabel').textContent=state.font+'px';
   if(activeTab()) renderHighlight();
 }
@@ -255,7 +253,7 @@ function openTab(name,text,uri=null){
   if(bom)text=text.slice(1);
   const lineEnding=text.includes('\r\n')?'CRLF':'LF';
   text=text.replace(/\r\n/g,'\n');
-  const tab={bom,lineEnding,id:'tab-'+Date.now()+'-'+Math.random().toString(16).slice(2),uri,name,text,saved:text,selectionStart:0,selectionEnd:0,scrollTop:0,scrollLeft:0};
+  const tab={bom,lineEnding,languageOverride:null,undoStack:[],redoStack:[],lastEdit:0,id:'tab-'+Date.now()+'-'+Math.random().toString(16).slice(2),uri,name,text,saved:text,selectionStart:0,selectionEnd:0,scrollTop:0,scrollLeft:0};
   state.tabs.push(tab);selectTab(tab.id);persist();closeSidebar();
 }
 function selectTab(id){
@@ -291,30 +289,36 @@ function loadEditor(){
   $('codeInput').selectionStart=Math.min(tab.selectionStart,tab.text.length);$('codeInput').selectionEnd=Math.min(tab.selectionEnd,tab.text.length);
   $('codeInput').scrollTop=tab.scrollTop;$('codeInput').scrollLeft=tab.scrollLeft;
   $('breadcrumbs').innerHTML=`${svg('folder')}<span>${escaped(state.name)}</span>${svg('chevron-right')}<b>${escaped(tab.name)}</b>`;
-  $('statusLanguage').textContent=lang(tab.name);renderHighlight();updatePosition();
+  $('statusLanguage').textContent=tab.languageOverride||lang(tab.name);renderHighlight();updatePosition();
 }
-const tokenize = text => {
-  const match=/(\/\*[\s\S]*?\*\/|\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:async|await|fun|val|var|let|const|function|return|if|else|for|while|class|interface|object|extends|implements|import|from|export|default|package|private|public|protected|static|void|null|true|false|new|try|catch|throw|suspend|when|is|in|def|lambda|with|as|self|print|println|fn|mut|pub|use|struct|impl|enum|match|break|continue|switch|case|type|int|float|double|boolean|string|char|String|Int|Float|Boolean|List|Map|dict|asyncio|None|True|False)\b|\b\d+(?:\.\d+)?\b|<\/?[a-zA-Z][^\n>]*>|\b[A-Za-z_$][\w$]*(?=\s*\())/gm;
-  let output='';let from=0; let m;let count=0;
-  while((m=match.exec(text))!==null){
-    output+=escaped(text.slice(from,m.index));const t=m[0];let category;
-    if(t.startsWith('/*')||t.startsWith('//')||t.startsWith('#'))category='comment';
-    else if(t.startsWith('"')||t.startsWith("'")||t.startsWith('`'))category='string';
-    else if(t[0]==='<')category='tag';
-    else if(/^\d/.test(t))category='number';
-    else if(/^(async|await|fun|val|var|let|const|function|return|if|else|for|while|class|interface|object|extends|implements|import|from|export|default|package|private|public|protected|static|void|null|true|false|new|try|catch|throw|suspend|when|is|in|def|lambda|with|as|self|fn|mut|pub|use|struct|impl|enum|match|break|continue|switch|case|type|int|float|double|boolean|string|char|String|Int|Float|Boolean|List|Map|dict|None|True|False)$/.test(t))category='keyword';
-    else category='function';
-    output+=`<span class="code-${category}">${escaped(t)}</span>`;from=match.lastIndex;
-    if(++count>12000)break;
-  }
-  output+=escaped(text.slice(from));return output||' ';
-};
-function renderHighlight(){
-  const input=$('codeInput');const lines=input.value.split('\n').length;
-  $('lineNumbers').textContent=Array.from({length:Math.min(lines,50000)},(_,i)=>i+1).join('\n');
-  $('syntaxText').innerHTML=tokenize(input.value)+(input.value.endsWith('\n')?'\u200b':'');
-  syncScroll();
-}
+ let highlightFrame=null;
+ let lastGutterLines=0;
+ let largeFileWarningId=null;
+ function renderHighlight() {
+   if (highlightFrame !== null) cancelAnimationFrame(highlightFrame);
+   highlightFrame=requestAnimationFrame(() => {
+     highlightFrame=null;
+     const input=$('codeInput');const tab=activeTab();
+     if (!tab) return;
+     const text=input.value;
+     const lines=(text.match(/\n/g)||[]).length+1;
+     if (lines!==lastGutterLines) {
+       // 50k is a safeguard against excessive line-number DOM work.
+       $('lineNumbers').textContent=Array.from({length:Math.min(lines,50000)},(_,i)=>i+1).join('\n');
+       lastGutterLines=lines;
+     }
+     const preview=$('syntaxText');
+     // The textarea always retains ALL text; disable rich markup for large files to
+     // avoid building hundreds of thousands of DOM nodes on Android WebView.
+     if (text.length > 180000) {
+       preview.textContent=text+(text.endsWith('\n')?'\u200b':'');
+       if (largeFileWarningId!==tab.id){largeFileWarningId=tab.id;toast('Highlight detail ditunda untuk file besar. Teks tetap dapat diedit.');}
+     } else {
+       preview.innerHTML=NQLanguage.highlight(text,tab.languageOverride||lang(tab.name))+(text.endsWith('\n')?'\u200b':'');
+     }
+     syncScroll();
+   });
+ }
 function syncScroll(){
   $('syntaxPane').scrollTop=$('codeInput').scrollTop;$('syntaxPane').scrollLeft=$('codeInput').scrollLeft;
   $('gutter').scrollTop=$('codeInput').scrollTop;
@@ -325,11 +329,36 @@ function updatePosition(){
   $('statusPosition').textContent=`Ln ${line}, Col ${col}`;
   $('statusInfo').innerHTML=svg('check')+(activeTab()&&activeTab().text!==activeTab().saved?' Modified':' Ready');
 }
+function prepareHistory(tab, oldText) {
+  if (!Array.isArray(tab.undoStack)) tab.undoStack=[];
+  if (!Array.isArray(tab.redoStack)) tab.redoStack=[];
+  const now=Date.now();
+  if (!tab.lastEdit || now-tab.lastEdit>650 || tab.undoStack.length===0) {
+    tab.undoStack.push({text:oldText,position:tab.selectionStart||0});
+    const limit=oldText.length>200000?1:oldText.length>60000?5:30;
+    while (tab.undoStack.length>limit) tab.undoStack.shift();
+  }
+  tab.lastEdit=now;tab.redoStack=[];
+}
+function stepHistory(direction) {
+  const tab=activeTab();if(!tab)return;
+  const from=direction==='undo'?tab.undoStack:tab.redoStack;
+  const to=direction==='undo'?tab.redoStack:tab.undoStack;
+  if(!from?.length)return;
+  const prior=from.pop();to.push({text:tab.text,position:$('codeInput').selectionStart});
+  while(to.length>(tab.text.length>200000?1:tab.text.length>60000?5:30))to.shift();
+  tab.text=prior.text;tab.lastEdit=0;
+  const input=$('codeInput');input.value=prior.text;
+  input.setSelectionRange(Math.min(prior.position,prior.text.length),Math.min(prior.position,prior.text.length));
+  rememberCursor(tab);renderHighlight();updatePosition();renderTabs();persist();input.focus();
+}
 function editText(newVal){
   const tab=activeTab();if(!tab)return;
+  if(tab.text!==newVal)prepareHistory(tab,tab.text);
   tab.text=newVal;rememberCursor(tab);renderHighlight();updatePosition();renderTabs();persist();
   if(tab.uri&&tab.uri.startsWith('demo:')){demoFiles[tab.uri]=tab.text;saveDemo();}
 }
+
 function newScratch(name='Untitled.kt'){openTab(name,'',null);}
 function promptCreate(folder){
   state.dialogAction=folder?'folder':'file';
@@ -395,6 +424,22 @@ function insertAtCursor(text){
   const el=$('codeInput');el.focus();let a=el.selectionStart,b=el.selectionEnd;
   el.setRangeText(text,a,b,'end');editText(el.value);updatePosition();
 }
+function openLanguage(){
+  const tab=activeTab();if(!tab){toast('Buka sebuah file terlebih dahulu.');return;}
+  $('languageSelect').value=tab.languageOverride||'auto';
+  openModal('languageDialog');
+}
+function gotoLine(){
+  const tab=activeTab();if(!tab){toast('Belum ada file aktif.');return;}
+  const requested=Number($('gotoNumber').value);
+  if(!Number.isInteger(requested)||requested<1){toast('Nomor baris tidak valid.');return;}
+  const text=$('codeInput').value;let pos=0,line=1;
+  while(line<requested){const end=text.indexOf('\n',pos);if(end<0)break;pos=end+1;line++;}
+  $('gotoDialog').close();const el=$('codeInput');el.focus();el.setSelectionRange(pos,pos);
+  // Position the caret visibly without affecting the stored file contents.
+  const lh=Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--line-height'))||23;
+  el.scrollTop=Math.max(0,(line-2)*lh);syncScroll();updatePosition();
+}
 const commands=[
   {name:'File baru',hint:'New File',icon:'file-plus',act:()=>promptCreate(false)},
   {name:'Folder baru',hint:'New Folder',icon:'folder-plus',act:()=>promptCreate(true)},
@@ -403,6 +448,10 @@ const commands=[
   {name:'Simpan',hint:'Ctrl+S',icon:'save',act:()=>saveActive()},
   {name:'Simpan sebagai...',hint:'Save As',icon:'save',act:()=>saveActive(true)},
   {name:'Cari & ganti',hint:'Ctrl+F',icon:'search',act:()=>openModal('searchDialog')},
+  {name:'Menuju baris',hint:'Ctrl+G',icon:'code',act:()=>openModal('gotoDialog')},
+  {name:'Pilih bahasa file',hint:'Syntax Language',icon:'code',act:()=>openLanguage()},
+  {name:'Undo',hint:'Ctrl+Z',icon:'undo',act:()=>stepHistory('undo')},
+  {name:'Redo',hint:'Ctrl+Shift+Z',icon:'undo',act:()=>stepHistory('redo')},
   {name:'Ganti tema',hint:'Light / Dark',icon:'moon',act:()=>{state.theme=state.theme==='dark'?'light':'dark';localStorage.setItem('nq-theme',state.theme);applySettings();}},
   {name:'Toggle word wrap',hint:'Wrap long lines',icon:'wrap',act:()=>{state.wrap=!state.wrap;localStorage.setItem('nq-wrap',state.wrap);applySettings();}},
   {name:'Pengaturan',hint:'Preferences',icon:'settings',act:()=>openModal('settingsDialog')}
@@ -430,10 +479,24 @@ function attach(){
   $('projectTitle').parentElement.onclick=openFolderPicker;
   $('codeInput').addEventListener('input',()=>editText($('codeInput').value));
   $('codeInput').addEventListener('scroll',syncScroll);
+  $('codeInput').addEventListener('beforeinput',e=>{
+    if(!state.autoPairs||e.isComposing||e.inputType!=='insertText'||typeof e.data!=='string')return;
+    const pairs={'(':')','[':']','{':'}','\"':'\"',"'":"'"};
+    if(!Object.prototype.hasOwnProperty.call(pairs,e.data))return;
+    const el=$('codeInput');const a=el.selectionStart,b=el.selectionEnd;
+    // Only pair at end/whitespace or with a selection; don't interfere with IME edits.
+    if(a===b && a<el.value.length && /[\w\])}]/.test(el.value[a]))return;
+    e.preventDefault();
+    const body=el.value.slice(a,b);const insert=e.data+body+pairs[e.data];
+    el.setRangeText(insert,a,b,'end');
+    const pos=a+1;el.setSelectionRange(pos,pos+body.length);
+    editText(el.value);
+  });
   $('codeInput').addEventListener('click',updatePosition);
   $('codeInput').addEventListener('keyup',updatePosition);
   $('codeInput').addEventListener('select',updatePosition);
   $('codeInput').addEventListener('keydown',e=>{
+    if(e.isComposing)return;
     if(e.key==='Tab'){e.preventDefault();insertAtCursor('    ');}
     if(e.key==='Enter'){
       const ta=e.currentTarget;const head=ta.value.slice(0,ta.selectionStart);const line=head.slice(head.lastIndexOf('\n')+1);const indent=(line.match(/^\s*/)||[''])[0];
@@ -441,7 +504,7 @@ function attach(){
     }
   });
   document.querySelectorAll('.quick-keys [data-insert]').forEach(b=>b.onclick=()=>insertAtCursor(b.dataset.insert==='\\t'?'    ':b.dataset.insert));
-  $('undoButton').onclick=()=>{const el=$('codeInput');el.focus();document.execCommand('undo');editText(el.value);};
+  $('undoButton').onclick=()=>stepHistory('undo');
   $('textDialogCancel').onclick=()=>$('textDialog').close();
   $('textForm').addEventListener('submit',e=>{
     if(e.submitter?.value==='cancel')return;
@@ -453,6 +516,18 @@ function attach(){
   $('commandQuery').addEventListener('input',e=>renderCommands(e.target.value));
   $('commandQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('commandResults').querySelector('.command-item')?.click();}});
   $('settingsClose').onclick=()=>$('settingsDialog').close();
+  $('statusLanguage').onclick=openLanguage;
+  $('languageCancel').onclick=()=>$('languageDialog').close();
+  $('languageOkay').onclick=()=>{
+    const tab=activeTab();if(!tab)return;
+    tab.languageOverride=$('languageSelect').value==='auto'?null:$('languageSelect').value;
+    $('statusLanguage').textContent=tab.languageOverride||lang(tab.name);
+    $('languageDialog').close();renderHighlight();persist();
+  };
+  $('gotoCancel').onclick=()=>$('gotoDialog').close();
+  $('gotoConfirm').onclick=gotoLine;
+  $('gotoNumber').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();gotoLine();}});
+  $('autoPairs').onchange=e=>{state.autoPairs=e.target.checked;localStorage.setItem('nq-autopairs',state.autoPairs);};
   $('fileRename').onclick=renameEntry; $('fileDelete').onclick=requestDelete; $('fileCancel').onclick=()=>$('fileActionsDialog').close();
   $('lightTheme').onchange=e=>{state.theme=e.target.checked?'light':'dark';localStorage.setItem('nq-theme',state.theme);applySettings();};
   $('wordWrap').onchange=e=>{state.wrap=e.target.checked;localStorage.setItem('nq-wrap',state.wrap);applySettings();};
@@ -472,6 +547,9 @@ function attach(){
       if(k==='p'){e.preventDefault();openModal('commandDialog');}
       if(k==='f'){e.preventDefault();openModal('searchDialog');}
       if(k==='n'){e.preventDefault();newScratch();}
+      if(k==='g'){e.preventDefault();openModal('gotoDialog');}
+      if(k==='z'){e.preventDefault();stepHistory(e.shiftKey?'redo':'undo');}
+      if(k==='y'){e.preventDefault();stepHistory('redo');}
     }
     if(e.key==='Escape')closeSidebar();
   });
@@ -504,9 +582,14 @@ window.App={back(){
   toast('NQ Code siap digunakan.');
 }};
 (function init(){
+  const select=$('languageSelect');
+  for(const language of NQLanguage.languages){
+    const option=document.createElement('option');option.value=language;option.textContent=language;
+    select.append(option);
+  }
   applySettings();attach();
   let stored;try{stored=JSON.parse(localStorage.getItem('nq-open-tabs'));}catch{}
-  if(stored?.tabs?.length){state.tabs=stored.tabs.filter(t=>typeof t.text==='string'&&typeof t.name==='string').slice(0,12);
+  if(stored?.tabs?.length){state.tabs=stored.tabs.filter(t=>typeof t.text==='string'&&typeof t.name==='string').slice(0,12).map(t=>({...t,undoStack:[],redoStack:[],lastEdit:0}));
     state.active=state.tabs.some(t=>t.id===stored.active)?stored.active:state.tabs[0]?.id||null;}
   setWorkspace('demo:/','DEMO WORKSPACE');
   renderTabs();loadEditor();

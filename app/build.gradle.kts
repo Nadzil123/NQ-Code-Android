@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "dev.nolqu.nqcode"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.nolqu.nqcode"
